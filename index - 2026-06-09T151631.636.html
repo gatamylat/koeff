@@ -1,0 +1,1650 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+
+<!-- PWA iOS -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="КЗ">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#B07A3E">
+
+<!-- PWA Manifest -->
+<link rel="manifest" href="./manifest.json">
+<link rel="apple-touch-icon" href="./icons/icon-180.png">
+<link rel="apple-touch-icon" sizes="152x152" href="./icons/icon-152.png">
+<link rel="apple-touch-icon" sizes="167x167" href="./icons/icon-167.png">
+
+<title>КЗ · Косвенные затраты</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%23B07A3E'/><text x='16' y='23' font-family='serif' font-size='20' font-weight='bold' fill='white' text-anchor='middle'>%25</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+/* ════════════════════════════════════════
+   ПЕРЕМЕННЫЕ И СБРОС
+════════════════════════════════════════ */
+:root {
+  --bg: #FAF9F5;
+  --bg2: #F3F1EB;
+  --bg3: #E8E5DC;
+  --ink: #1C1A17;
+  --ink2: #5A5650;
+  --ink3: #9A968F;
+  --accent: #B07A3E;
+  --accent2: #8A5E28;
+  --accent-light: #EAD9C0;
+  --good: #4A7C59;
+  --good-bg: #E4EFE8;
+  --warn: #C07A28;
+  --warn-bg: #F5E8D3;
+  --bad: #A64B4B;
+  --bad-bg: #F2E3E3;
+  --border: #DDD9D0;
+  --card: #FFFFFF;
+  --r: 14px;
+  --r-sm: 8px;
+  --safe-top: env(safe-area-inset-top);
+  --safe-bottom: env(safe-area-inset-bottom);
+  --nav-h: 64px;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+html { height: 100%; }
+body {
+  font-family: 'DM Sans', -apple-system, sans-serif;
+  background: var(--bg);
+  color: var(--ink);
+  min-height: 100dvh;
+  overflow-x: hidden;
+  padding-top: var(--safe-top);
+}
+h1, h2, h3 { font-family: 'Playfair Display', serif; }
+
+/* ════════════════════════════════════════
+   АНИМАЦИИ
+════════════════════════════════════════ */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+@keyframes pulse-border {
+  0%, 100% { border-color: var(--accent); }
+  50%       { border-color: var(--accent-light); }
+}
+.anim { opacity: 0; animation: fadeUp .5s ease forwards; }
+.anim:nth-child(1) { animation-delay: .05s; }
+.anim:nth-child(2) { animation-delay: .1s;  }
+.anim:nth-child(3) { animation-delay: .15s; }
+.anim:nth-child(4) { animation-delay: .2s;  }
+.anim:nth-child(5) { animation-delay: .25s; }
+.anim:nth-child(6) { animation-delay: .3s;  }
+
+/* ════════════════════════════════════════
+   ГЛОБАЛЬНЫЙ ОВЕРЛЕЙ DRAG & DROP
+════════════════════════════════════════ */
+#drag-overlay {
+  position: fixed; inset: 0; z-index: 999;
+  background: rgba(176,122,62,.15);
+  backdrop-filter: blur(4px);
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  border: 4px dashed var(--accent);
+  pointer-events: none;
+  animation: fadeIn .15s ease;
+}
+#drag-overlay.active { display: flex; }
+#drag-overlay .do-icon { font-size: 56px; margin-bottom: 12px; }
+#drag-overlay .do-text { font-family: 'Playfair Display', serif; font-size: 22px; font-weight: 700; color: var(--accent2); }
+#drag-overlay .do-sub  { font-size: 14px; color: var(--ink3); margin-top: 6px; }
+
+/* ════════════════════════════════════════
+   УВЕДОМЛЕНИЯ LOADING / ERROR / TOAST
+════════════════════════════════════════ */
+#loading-bar {
+  position: fixed; top: var(--safe-top); left: 0; right: 0; z-index: 500;
+  background: var(--accent); color: white;
+  display: none; align-items: center; justify-content: center; gap: 10px;
+  padding: 10px 20px; font-size: 13px; font-weight: 600;
+}
+#loading-bar.active { display: flex; }
+#loading-spinner {
+  width: 16px; height: 16px; border: 2px solid rgba(255,255,255,.4);
+  border-top-color: white; border-radius: 50%;
+  animation: spin .7s linear infinite;
+}
+#error-bar {
+  background: var(--bad-bg); color: var(--bad);
+  border-bottom: 1px solid #e8c5c5;
+  display: none; align-items: center; justify-content: space-between;
+  padding: 10px 16px; font-size: 13px; font-weight: 500;
+  margin-bottom: 0;
+}
+#error-bar.active { display: flex; }
+#error-bar button { background: none; border: none; cursor: pointer; color: var(--bad); font-size: 18px; line-height: 1; }
+.toast {
+  position: fixed; bottom: calc(var(--nav-h) + var(--safe-bottom) + 10px);
+  left: 50%; transform: translateX(-50%) translateY(10px);
+  background: var(--ink); color: white; padding: 10px 20px; border-radius: 24px;
+  font-size: 13px; font-weight: 500; z-index: 600; opacity: 0;
+  transition: all .25s; pointer-events: none; white-space: nowrap;
+  max-width: calc(100vw - 40px); text-align: center;
+}
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* ════════════════════════════════════════
+   НАВИГАЦИЯ
+════════════════════════════════════════ */
+.nav {
+  position: fixed; bottom: 0; left: 50%; transform: translateX(-50%);
+  width: 100%; max-width: 960px;
+  background: rgba(250,249,245,.92); backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-top: 1px solid var(--border);
+  display: flex; z-index: 200;
+  padding-bottom: var(--safe-bottom);
+}
+.nav-btn {
+  flex: 1; display: flex; flex-direction: column; align-items: center;
+  gap: 3px; padding: 9px 4px 8px;
+  background: none; border: none; cursor: pointer; color: var(--ink3);
+  font-family: 'DM Sans', sans-serif; font-size: 10px; font-weight: 500;
+  transition: color .2s;
+}
+.nav-btn svg { width: 22px; height: 22px; stroke-width: 1.8; fill: none; stroke: currentColor; }
+.nav-btn.active { color: var(--accent); }
+.nav-btn.active svg { stroke-width: 2.2; }
+
+/* ════════════════════════════════════════
+   СТРАНИЦЫ
+════════════════════════════════════════ */
+.page {
+  display: none; flex-direction: column;
+  padding-bottom: calc(var(--nav-h) + var(--safe-bottom) + 8px);
+  overflow-y: auto; min-height: 100dvh;
+  max-width: 960px; margin: 0 auto; width: 100%;
+}
+.page.active { display: flex; }
+
+/* ════════════════════════════════════════
+   ОБЩИЕ КОМПОНЕНТЫ
+════════════════════════════════════════ */
+.page-header { padding: clamp(16px,4vw,24px) clamp(16px,4vw,24px) 0; }
+.page-header h1 { font-size: clamp(20px,5vw,28px); line-height: 1.2; }
+.page-header .sub { font-size: 12px; color: var(--ink3); margin-top: 3px; }
+
+.card {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: var(--r); padding: clamp(14px,3vw,20px);
+  margin: 12px clamp(12px,4vw,24px) 0;
+  box-shadow: 0 1px 6px rgba(28,26,23,.04);
+}
+.card-title {
+  font-size: 11px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: .06em; color: var(--ink3); margin-bottom: 12px;
+}
+
+/* Status badges */
+.badge {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 4px 10px; border-radius: 20px;
+  font-size: 11px; font-weight: 700;
+}
+.badge-ok   { background: var(--good-bg); color: var(--good); }
+.badge-warn { background: var(--warn-bg); color: var(--warn); }
+.badge-bad  { background: var(--bad-bg);  color: var(--bad);  }
+.badge-dot  { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+
+/* Ratio pill */
+.ratio-pill {
+  display: inline-block; padding: 3px 8px;
+  border-radius: 20px; font-size: 12px; font-weight: 700;
+}
+
+/* ════════════════════════════════════════
+   GAUGE
+════════════════════════════════════════ */
+.gauge-wrap { display: flex; flex-direction: column; align-items: center; padding: 4px 0 8px; }
+.gauge-svg { width: clamp(200px,55vw,260px); height: clamp(110px,30vw,140px); overflow: visible; }
+.gauge-val-text { font-family: 'Playfair Display', serif; font-size: clamp(32px,9vw,44px); font-weight: 700; text-anchor: middle; }
+.gauge-label-text { font-family: 'DM Sans', sans-serif; font-size: 12px; fill: var(--ink3); text-anchor: middle; }
+
+/* ════════════════════════════════════════
+   МЕТРИКИ
+════════════════════════════════════════ */
+.metrics-grid {
+  display: grid; grid-template-columns: repeat(2, 1fr);
+  gap: 10px; margin: 10px clamp(12px,4vw,24px) 0;
+}
+.metric {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: var(--r); padding: 12px 14px;
+  animation: fadeUp .4s ease forwards; opacity: 0;
+}
+.metric .lbl { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--ink3); margin-bottom: 6px; }
+.metric .val { font-family: 'Playfair Display', serif; font-size: clamp(16px,4.5vw,22px); font-weight: 700; line-height: 1; }
+.metric .delta { font-size: 11px; font-weight: 600; margin-top: 4px; }
+.delta-up { color: var(--bad); }
+.delta-down { color: var(--good); }
+
+/* ════════════════════════════════════════
+   CHART CONTAINERS
+════════════════════════════════════════ */
+.chart-wrap { position: relative; height: clamp(120px,35vw,180px); padding: 0 4px; margin-top: 8px; }
+.chart-wrap.tall { height: clamp(160px,45vw,240px); }
+
+/* ════════════════════════════════════════
+   ЗОНА ЗАГРУЗКИ (IMPORT)
+════════════════════════════════════════ */
+.drop-zone {
+  border: 2px dashed var(--border); border-radius: var(--r);
+  padding: clamp(24px,6vw,44px) 20px; text-align: center; cursor: pointer;
+  transition: all .2s; background: var(--bg2);
+  margin: 16px clamp(12px,4vw,24px) 0;
+}
+.drop-zone:hover { border-color: var(--accent); background: var(--accent-light); }
+.drop-zone.over  { border-color: var(--accent); background: var(--accent-light); animation: pulse-border 1s ease infinite; }
+.drop-zone .dz-icon { font-size: clamp(28px,8vw,40px); margin-bottom: 10px; }
+.drop-zone h3 { font-size: clamp(14px,3.5vw,17px); margin-bottom: 6px; }
+.drop-zone p  { font-size: 12px; color: var(--ink3); line-height: 1.5; }
+
+/* mini compact bar (shown after first load) */
+.drop-mini {
+  display: flex; align-items: center; gap: 12px;
+  margin: 12px clamp(12px,4vw,24px) 0;
+  background: var(--bg2); border: 1px dashed var(--border);
+  border-radius: var(--r-sm); padding: 12px 16px; cursor: pointer;
+  transition: all .2s;
+}
+.drop-mini:hover { border-color: var(--accent); background: var(--accent-light); }
+.drop-mini .dm-icon { font-size: 20px; }
+.drop-mini .dm-text { font-size: 13px; font-weight: 600; color: var(--ink2); }
+.drop-mini .dm-sub  { font-size: 11px; color: var(--ink3); }
+
+/* period selection list */
+.period-select-list { margin: 10px clamp(12px,4vw,24px) 0; }
+.period-item {
+  background: var(--card); border: 1px solid var(--border); border-radius: var(--r-sm);
+  padding: 12px 14px; margin-bottom: 8px; cursor: pointer;
+  display: flex; align-items: center; gap: 10px; transition: all .15s;
+}
+.period-item:hover { border-color: var(--accent); }
+.period-item.selected { border-color: var(--accent); background: #FDF5EC; }
+.chk {
+  width: 22px; height: 22px; border: 2px solid var(--border); border-radius: 5px;
+  flex-shrink: 0; display: flex; align-items: center; justify-content: center;
+  transition: all .15s;
+}
+.period-item.selected .chk { background: var(--accent); border-color: var(--accent); }
+.chk svg { width: 12px; height: 12px; stroke: white; stroke-width: 2.5; fill: none; display: none; }
+.period-item.selected .chk svg { display: block; }
+.pi-name { font-size: 14px; font-weight: 600; }
+.pi-nums { font-size: 11px; color: var(--ink3); margin-top: 2px; }
+
+/* ════════════════════════════════════════
+   КНОПКИ
+════════════════════════════════════════ */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center;
+  gap: 8px; border: none; border-radius: var(--r-sm); cursor: pointer;
+  font-family: 'DM Sans', sans-serif; font-weight: 600; transition: all .15s;
+}
+.btn:active { transform: scale(.97); }
+.btn-primary { background: var(--accent); color: white; padding: 13px 20px; font-size: 14px; width: 100%; }
+.btn-primary:hover { background: var(--accent2); }
+.btn-primary:disabled { opacity: .4; cursor: not-allowed; transform: none; }
+.btn-ghost  { background: var(--bg3); color: var(--ink2); padding: 10px 16px; font-size: 13px; }
+.btn-danger { background: var(--bad-bg); color: var(--bad); padding: 10px 16px; font-size: 13px; }
+.btn-icon {
+  background: none; border: none; cursor: pointer; padding: 5px;
+  color: var(--ink3); border-radius: 6px; transition: all .15s;
+  display: flex; align-items: center; justify-content: center;
+}
+.btn-icon:hover { background: var(--bg3); color: var(--ink); }
+.btn-icon svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.8; }
+.actions-bar { margin: 14px clamp(12px,4vw,24px) 0; display: flex; flex-direction: column; gap: 10px; }
+.sel-bar { display: flex; align-items: center; justify-content: space-between; margin: 10px clamp(12px,4vw,24px) 0; }
+.sel-bar span { font-size: 13px; font-weight: 600; color: var(--ink2); }
+
+/* ════════════════════════════════════════
+   РУЧНОЙ ВВОД
+════════════════════════════════════════ */
+.divider {
+  display: flex; align-items: center; gap: 12px;
+  margin: 16px clamp(12px,4vw,24px) 0;
+}
+.divider span { font-size: 10px; color: var(--ink3); white-space: nowrap; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; }
+.divider::before, .divider::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+.form-group { margin: 10px clamp(12px,4vw,24px) 0; }
+.form-label { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--ink3); margin-bottom: 6px; display: block; }
+.form-input {
+  width: 100%; padding: 12px 14px; border: 1px solid var(--border);
+  border-radius: var(--r-sm); background: white;
+  font-family: 'DM Sans', sans-serif; font-size: 15px; color: var(--ink);
+  transition: border .15s; outline: none;
+}
+.form-input:focus { border-color: var(--accent); }
+.calc-preview {
+  margin: 10px clamp(12px,4vw,24px) 0;
+  background: var(--bg2); border-radius: var(--r-sm); padding: 12px 14px;
+  font-size: 14px; color: var(--ink2);
+}
+
+/* ════════════════════════════════════════
+   ИСТОРИЯ
+════════════════════════════════════════ */
+.filter-row {
+  display: flex; gap: 8px; margin: 14px clamp(12px,4vw,24px) 0;
+  overflow-x: auto; padding-bottom: 2px; -webkit-overflow-scrolling: touch;
+}
+.filter-row::-webkit-scrollbar { display: none; }
+.filter-chip {
+  flex-shrink: 0; padding: 6px 14px; border-radius: 20px;
+  border: 1px solid var(--border); background: var(--card);
+  font-size: 12px; font-weight: 600; color: var(--ink3); cursor: pointer;
+  transition: all .15s; white-space: nowrap;
+}
+.filter-chip.active { background: var(--accent); border-color: var(--accent); color: white; }
+.period-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.period-table th {
+  padding: 8px 10px; text-align: left; font-size: 10px;
+  font-weight: 600; text-transform: uppercase; letter-spacing: .05em;
+  color: var(--ink3); border-bottom: 1px solid var(--border);
+}
+.period-table td { padding: 10px 10px; border-bottom: 1px solid var(--bg3); vertical-align: middle; }
+.period-table tr:last-child td { border-bottom: none; }
+.period-table tr { cursor: pointer; transition: background .1s; }
+.period-table tr:hover td { background: var(--bg); }
+.tbl-actions { display: flex; gap: 4px; }
+
+/* ════════════════════════════════════════
+   ДЕТАЛЬНЫЙ ВИД
+════════════════════════════════════════ */
+.back-btn {
+  display: inline-flex; align-items: center; gap: 5px;
+  font-size: 13px; color: var(--ink3); background: none; border: none;
+  cursor: pointer; font-family: 'DM Sans', sans-serif; margin-bottom: 14px;
+}
+.back-btn svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2; }
+.breakdown-toggle {
+  width: 100%; background: none; border: none; cursor: pointer;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0; font-family: 'DM Sans', sans-serif; font-size: 13px;
+  color: var(--ink2); font-weight: 500;
+}
+.breakdown-toggle svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 2; transition: transform .2s; }
+.breakdown-toggle.open svg { transform: rotate(180deg); }
+.breakdown-list { display: none; margin-top: 10px; }
+.breakdown-list.open { display: block; }
+.breakdown-item { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--bg3); font-size: 12px; }
+.breakdown-item:last-child { border-bottom: none; }
+.breakdown-item .bn { color: var(--ink2); flex: 1; padding-right: 8px; }
+.breakdown-item .bv { font-weight: 600; white-space: nowrap; }
+
+/* ════════════════════════════════════════
+   НАСТРОЙКИ
+════════════════════════════════════════ */
+.settings-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 13px 0; border-bottom: 1px solid var(--bg3);
+}
+.settings-row:last-child { border-bottom: none; }
+.s-label { font-size: 14px; font-weight: 500; }
+.s-desc  { font-size: 11px; color: var(--ink3); margin-top: 2px; }
+.rows-config-btn {
+  display: flex; align-items: center; gap: 8px; padding: 10px 14px;
+  background: var(--bg2); border: 1px solid var(--border); border-radius: var(--r-sm);
+  cursor: pointer; font-size: 12px; color: var(--ink2);
+  font-family: 'DM Sans', sans-serif; width: 100%; font-weight: 500; transition: all .15s;
+}
+.rows-config-btn:hover { background: var(--bg3); }
+.rows-config-btn svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 1.8; }
+
+/* ════════════════════════════════════════
+   МОДАЛКА (rows config)
+════════════════════════════════════════ */
+.modal-overlay {
+  position: fixed; inset: 0; background: rgba(28,26,23,.5);
+  display: none; align-items: flex-end; justify-content: center;
+  z-index: 300; backdrop-filter: blur(2px);
+}
+.modal-overlay.open { display: flex; }
+.modal-sheet {
+  background: var(--bg); width: 100%; max-width: 960px;
+  border-radius: var(--r) var(--r) 0 0; padding: 20px;
+  padding-bottom: calc(20px + var(--safe-bottom));
+  max-height: 85dvh; overflow-y: auto;
+}
+.modal-handle { width: 40px; height: 4px; background: var(--border); border-radius: 2px; margin: 0 auto 18px; }
+.modal-sheet h2 { font-size: 20px; margin-bottom: 12px; }
+.rows-ta {
+  font-family: 'DM Sans', sans-serif; font-size: 13px; width: 100%;
+  padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--r-sm);
+  background: white; resize: vertical; min-height: 80px; color: var(--ink); outline: none;
+}
+.rows-ta:focus { border-color: var(--accent); }
+.modal-hint { font-size: 11px; color: var(--ink3); margin-top: 6px; line-height: 1.5; }
+.modal-actions { display: flex; gap: 10px; margin-top: 14px; }
+.modal-actions .btn { flex: 1; }
+
+/* ════════════════════════════════════════
+   ПУСТОЕ СОСТОЯНИЕ
+════════════════════════════════════════ */
+.empty-state {
+  display: flex; flex-direction: column; align-items: center;
+  justify-content: center; padding: 48px 20px; text-align: center; flex: 1;
+}
+.empty-state .es-icon { font-size: 44px; margin-bottom: 14px; }
+.empty-state h3 { font-size: 20px; margin-bottom: 8px; }
+.empty-state p  { font-size: 14px; color: var(--ink3); line-height: 1.6; max-width: 280px; }
+
+/* ════════════════════════════════════════
+   ДЕСКТОП (≥ 720px)
+════════════════════════════════════════ */
+@media (min-width: 720px) {
+  .metrics-grid { grid-template-columns: repeat(4, 1fr); }
+  .chart-wrap { height: 200px; }
+  .chart-wrap.tall { height: 260px; }
+  .gauge-svg { width: 280px; height: 150px; }
+}
+@media (min-width: 960px) {
+  body { max-width: 960px; margin: 0 auto; }
+  .nav { border-left: 1px solid var(--border); border-right: 1px solid var(--border); }
+  .chart-wrap { height: 220px; }
+  .chart-wrap.tall { height: 280px; }
+}
+
+/* ════════════════════════════════════════
+   iOS Safari
+════════════════════════════════════════ */
+@supports (-webkit-touch-callout: none) {
+  body { min-height: -webkit-fill-available; }
+}
+</style>
+</head>
+<body>
+
+<!-- ═══ GLOBAL DRAG OVERLAY ═══ -->
+<div id="drag-overlay">
+  <div class="do-icon">📂</div>
+  <div class="do-text">Отпустите для импорта</div>
+  <div class="do-sub">Excel-файл «Анализ бизнеса»</div>
+</div>
+
+<!-- ═══ LOADING / ERROR ═══ -->
+<div id="loading-bar">
+  <div id="loading-spinner"></div>
+  <span id="loading-msg">Обработка файла...</span>
+</div>
+<div id="error-bar">
+  <span id="error-msg">Ошибка</span>
+  <button onclick="hideError()">✕</button>
+</div>
+
+<!-- ═══════════════════════════════════
+     PAGE: DASHBOARD
+═══════════════════════════════════ -->
+<div class="page active" id="page-dash">
+  <div class="page-header">
+    <div style="display:flex;align-items:flex-start;justify-content:space-between">
+      <div>
+        <h1>Косвенные<br>затраты</h1>
+        <div class="sub" id="dash-period-sub">Нет данных</div>
+      </div>
+      <div id="dash-badge" style="padding-top:4px"></div>
+    </div>
+  </div>
+
+  <!-- EMPTY STATE -->
+  <div id="dash-empty" class="empty-state">
+    <div class="es-icon">📊</div>
+    <h3>Нет данных</h3>
+    <p>Перетащите Excel-отчёт на страницу или перейдите во вкладку «Импорт»</p>
+  </div>
+
+  <!-- CONTENT -->
+  <div id="dash-body" style="display:none">
+
+    <!-- Gauge card -->
+    <div class="card anim" style="margin-top:16px">
+      <div class="card-title">Соотношение КЗ / ПЗ · последний период</div>
+      <div class="gauge-wrap">
+        <svg class="gauge-svg" id="gauge-svg" viewBox="0 0 260 140" xmlns="http://www.w3.org/2000/svg">
+          <path id="g-bg"     fill="none" stroke="#E8E5DC" stroke-width="18" stroke-linecap="round"/>
+          <path id="g-fill"   fill="none" stroke-width="18" stroke-linecap="round"/>
+          <circle id="g-target" r="6" fill="white" stroke="#B07A3E" stroke-width="2.5"/>
+          <text x="22"  y="135" style="font-family:DM Sans,sans-serif;font-size:11px;fill:#9A968F">0</text>
+          <text x="238" y="135" style="font-family:DM Sans,sans-serif;font-size:11px;fill:#9A968F;text-anchor:end">1.5</text>
+          <text id="g-val"    x="130" y="62"  class="gauge-val-text">—</text>
+          <text id="g-sublbl" x="130" y="84"  class="gauge-label-text">к/п затрат</text>
+          <text id="g-target-lbl" x="130" y="130" class="gauge-label-text">цель: 0.65</text>
+        </svg>
+      </div>
+      <div style="display:flex;justify-content:center;margin-top:2px" id="dash-gauge-info"></div>
+    </div>
+
+    <!-- Metrics -->
+    <div class="metrics-grid" id="dash-metrics"></div>
+
+    <!-- Trend chart -->
+    <div class="card anim" style="margin-top:12px">
+      <div class="card-title">Динамика соотношения</div>
+      <div class="chart-wrap"><canvas id="trend-canvas"></canvas></div>
+    </div>
+
+    <!-- Recent list -->
+    <div class="card anim" style="margin-top:12px; padding-bottom:4px; margin-bottom:4px;">
+      <div class="card-title">Последние периоды</div>
+      <div id="recent-list"></div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════
+     PAGE: IMPORT
+═══════════════════════════════════ -->
+<div class="page" id="page-import">
+  <div class="page-header">
+    <h1>Импорт данных</h1>
+    <div class="sub">XLS-файл или ручной ввод</div>
+  </div>
+
+  <div id="error-bar-import" style="display:none;"></div>
+
+  <!-- Drop zone (large, always visible) -->
+  <div id="drop-zone-full" class="drop-zone" onclick="document.getElementById('file-input').click()">
+    <div class="dz-icon">📂</div>
+    <h3>Перетащите Excel-отчёт сюда</h3>
+    <p>«Анализ бизнеса» из управленческого учёта<br>.xls · .xlsx</p>
+  </div>
+  <input type="file" id="file-input" accept=".xls,.xlsx" style="display:none">
+
+  <!-- After parse: period selection -->
+  <div id="parsed-section" style="display:none">
+    <div class="sel-bar">
+      <span>Найдено периодов: <b style="color:var(--accent)" id="parsed-count">0</b></span>
+      <button class="btn btn-ghost" style="font-size:11px;padding:6px 12px" onclick="selectAllPeriods()">Выбрать все</button>
+    </div>
+    <div class="period-select-list" id="period-select-list"></div>
+    <div class="actions-bar">
+      <button class="btn btn-primary" id="import-btn" onclick="importSelected()" disabled>
+        <svg viewBox="0 0 24 24" style="width:15px;height:15px;stroke:white;fill:none;stroke-width:2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Импортировать выбранные
+      </button>
+      <button class="btn btn-ghost" onclick="cancelParse()">Отмена</button>
+    </div>
+  </div>
+
+  <!-- Manual entry -->
+  <div class="divider"><span>или ввести вручную</span></div>
+  <div class="form-group">
+    <label class="form-label">Период</label>
+    <input type="text" class="form-input" id="m-period" placeholder="АПРЕЛЬ 2026">
+  </div>
+  <div class="form-group">
+    <label class="form-label">Прямые затраты (₽)</label>
+    <input type="number" class="form-input" id="m-direct" placeholder="0" min="0" oninput="updatePreview()">
+  </div>
+  <div class="form-group">
+    <label class="form-label">Косвенные затраты (₽)</label>
+    <input type="number" class="form-input" id="m-indirect" placeholder="0" min="0" oninput="updatePreview()">
+  </div>
+  <div class="form-group">
+    <label class="form-label">Примечание</label>
+    <input type="text" class="form-input" id="m-note" placeholder="комментарий...">
+  </div>
+  <div class="calc-preview" id="calc-preview">— / — = —</div>
+  <div class="actions-bar" style="margin-bottom:8px">
+    <button class="btn btn-primary" onclick="addManual()">Добавить запись</button>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════
+     PAGE: HISTORY
+═══════════════════════════════════ -->
+<div class="page" id="page-history">
+  <div class="page-header">
+    <h1>История</h1>
+    <div class="sub" id="hist-count-sub">0 периодов</div>
+  </div>
+
+  <div id="hist-empty" class="empty-state" style="display:none">
+    <div class="es-icon">📋</div>
+    <h3>История пуста</h3>
+    <p>Импортируйте данные или добавьте записи вручную</p>
+  </div>
+
+  <div id="hist-body">
+    <!-- Period filter chips -->
+    <div class="filter-row" id="filter-row">
+      <button class="filter-chip active" data-filter="all"   onclick="setFilter('all')">Все</button>
+      <button class="filter-chip"        data-filter="12"    onclick="setFilter('12')">12 мес.</button>
+      <button class="filter-chip"        data-filter="6"     onclick="setFilter('6')">6 мес.</button>
+      <button class="filter-chip"        data-filter="3"     onclick="setFilter('3')">3 мес.</button>
+    </div>
+
+    <!-- Full chart -->
+    <div class="card anim">
+      <div class="card-title" id="hist-chart-title">Соотношение КЗ/ПЗ по периодам</div>
+      <div class="chart-wrap tall"><canvas id="hist-canvas"></canvas></div>
+    </div>
+
+    <!-- Stacked cost chart -->
+    <div class="card anim" style="margin-top:12px">
+      <div class="card-title">Динамика затрат (млн ₽)</div>
+      <div class="chart-wrap tall"><canvas id="stack-canvas"></canvas></div>
+    </div>
+
+    <!-- Table -->
+    <div class="card anim" style="margin-top:12px; padding:0; overflow:hidden; margin-bottom:4px;">
+      <table class="period-table">
+        <thead>
+          <tr>
+            <th>Период</th>
+            <th>ПЗ</th>
+            <th>КЗ</th>
+            <th>КЗ/ПЗ</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="hist-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════
+     PAGE: DETAIL (внутренняя)
+═══════════════════════════════════ -->
+<div class="page" id="page-detail">
+  <div style="padding:clamp(16px,4vw,24px) clamp(16px,4vw,24px) 0">
+    <button class="back-btn" onclick="backFromDetail()">
+      <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>Назад
+    </button>
+    <h1 id="detail-title">—</h1>
+    <div style="margin-top:8px;display:flex;align-items:center;gap:10px">
+      <div id="detail-badge"></div>
+      <span style="font-size:12px;color:var(--ink3)" id="detail-date"></span>
+    </div>
+  </div>
+  <div class="metrics-grid" id="detail-metrics" style="margin-top:12px"></div>
+  <div class="card" style="margin-top:12px">
+    <button class="breakdown-toggle" id="bt-indirect" onclick="toggleBD('indirect')">
+      <span>Косвенные затраты — детализация</span>
+      <svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
+    </button>
+    <div class="breakdown-list" id="bd-indirect"></div>
+  </div>
+  <div class="card" style="margin-top:12px; margin-bottom:8px">
+    <button class="breakdown-toggle" id="bt-direct" onclick="toggleBD('direct')">
+      <span>Прямые затраты — детализация</span>
+      <svg viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9"/></svg>
+    </button>
+    <div class="breakdown-list" id="bd-direct"></div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════
+     PAGE: SETTINGS
+═══════════════════════════════════ -->
+<div class="page" id="page-settings">
+  <div class="page-header">
+    <h1>Настройки</h1>
+    <div class="sub">Параметры расчёта</div>
+  </div>
+
+  <div class="card anim" style="margin-top:20px">
+    <div class="card-title">Норматив</div>
+    <div class="settings-row">
+      <div>
+        <div class="s-label">Целевое соотношение КЗ/ПЗ</div>
+        <div class="s-desc">65 коп. косвенных на 1 руб. прямых</div>
+      </div>
+      <input type="number" id="target-input" value="0.65" step="0.01" min="0.1" max="2"
+        style="width:76px;padding:7px 10px;border:1px solid var(--border);border-radius:var(--r-sm);font-size:16px;font-weight:700;color:var(--ink);text-align:center;font-family:'DM Sans',sans-serif;background:white;outline:none"
+        oninput="onTargetChange()">
+    </div>
+    <div style="font-size:11px;color:var(--ink3);line-height:1.6;margin-top:4px">
+      Норма: ≤ <b id="range-ok">0.715</b> &nbsp;·&nbsp;
+      Повышен: ≤ <b id="range-warn">0.780</b> &nbsp;·&nbsp;
+      Высокий: выше
+    </div>
+  </div>
+
+  <div class="card anim" style="margin-top:12px">
+    <div class="card-title">Строки Excel · Косвенные затраты</div>
+    <div style="font-size:12px;color:var(--ink3);margin-bottom:10px;line-height:1.6" id="indirect-preview"></div>
+    <button class="rows-config-btn" onclick="openModal('indirect')">
+      <svg viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+      Редактировать строки КЗ
+    </button>
+  </div>
+
+  <div class="card anim" style="margin-top:12px">
+    <div class="card-title">Строки Excel · Прямые затраты</div>
+    <div style="font-size:12px;color:var(--ink3);margin-bottom:10px;line-height:1.6" id="direct-preview"></div>
+    <button class="rows-config-btn" onclick="openModal('direct')">
+      <svg viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+      Редактировать строки ПЗ
+    </button>
+  </div>
+
+  <div class="card anim" style="margin-top:12px">
+    <div class="card-title">Данные</div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <button class="btn btn-ghost" onclick="exportJSON()" style="flex:1">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="width:14px;height:14px"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        Экспорт JSON
+      </button>
+      <button class="btn btn-danger" onclick="confirmClear()" style="flex:1">Очистить всё</button>
+    </div>
+  </div>
+
+  <div class="card anim" style="margin-top:12px;margin-bottom:8px">
+    <div class="card-title">О программе</div>
+    <div style="font-size:13px;color:var(--ink2);line-height:1.8">
+      <b>КЗ · Косвенные затраты v2.0</b><br>
+      Мониторинг соотношения ПЗ / КЗ<br>
+      Massivburg · Санкт-Петербург<br>
+      <span style="color:var(--ink3)">Строки по умолчанию — управленческий учёт организации</span>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ BOTTOM NAV ═══ -->
+<nav class="nav">
+  <button class="nav-btn active" id="nav-dash"     onclick="goPage('dash')">
+    <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>Дашборд
+  </button>
+  <button class="nav-btn" id="nav-import"   onclick="goPage('import')">
+    <svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>Импорт
+  </button>
+  <button class="nav-btn" id="nav-history"  onclick="goPage('history')">
+    <svg viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>История
+  </button>
+  <button class="nav-btn" id="nav-settings" onclick="goPage('settings')">
+    <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>Настройки
+  </button>
+</nav>
+
+<!-- ═══ MODAL: rows config ═══ -->
+<div class="modal-overlay" id="rows-modal" onclick="onModalClick(event)">
+  <div class="modal-sheet">
+    <div class="modal-handle"></div>
+    <h2 id="modal-title">Строки</h2>
+    <p style="font-size:13px;color:var(--ink2);margin-bottom:12px;line-height:1.6" id="modal-desc"></p>
+    <label class="form-label">Номера строк (1-индексированные, через запятую)</label>
+    <textarea class="rows-ta" id="rows-ta" rows="4"></textarea>
+    <div class="modal-hint" id="modal-hint"></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="document.getElementById('rows-modal').classList.remove('open')">Отмена</button>
+      <button class="btn btn-primary" onclick="saveRows()">Сохранить</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ TOAST ═══ -->
+<div class="toast" id="toast"></div>
+
+<!-- ═══════════════════════════════════════════
+     SCRIPT
+═══════════════════════════════════════════ -->
+<script>
+'use strict';
+
+// ═══════════════════════════════════
+//  КОНСТАНТЫ — строки Excel (1-based)
+// ═══════════════════════════════════
+// Используем 13-21 вместо 12-21: строка 12 = итог строк 13-21 (двойной счёт)
+const DEFAULT_INDIRECT = [13,14,15,16,17,18,19,20,21,29,30,31,37,39,40,42,44,46,48,49,50,52,60,61,62,72,73,75,77,79];
+const DEFAULT_DIRECT   = [23,24,25,26,27,28,33,34,35,36,45,47];
+
+const ROW_NAMES = {
+  13:'Аренда помещения (Производство)',14:'Вывоз мусора',15:'Командировочные',
+  16:'Комиссия банка',17:'Коммунальные (Офис)',18:'Коммунальные (Производство)',
+  19:'Хоз. расходы Офис',20:'Хоз. расходы Производство',21:'Подбор персонала',
+  23:'Закупка фурнитуры',24:'Закупка доски',25:'Закупка плитного материала',
+  26:'Закупка шпона',27:'Закупка палубы',28:'Закупка ЛКМ ⚠️',
+  29:'Закупка расходников',30:'Закупка упаковочного материала',31:'Закупка прочее',
+  33:'Подряд — Логистика',34:'Подряд — Монтаж',35:'Подряд — Работы',36:'Подряд — прочие',
+  37:'Комиссия дизайнерам',39:'Транспорт — ГСМ',40:'Транспорт — Ремонт',
+  42:'Маркетинг',44:'Зарплата Администрация',45:'Сдельная оплата труда ⚠️',
+  46:'Зарплата Конструкторы и Менеджеры',47:'Удержания',
+  48:'Компенсация ГСМ',49:'Компенсация связи',50:'Премии',
+  52:'Налоги ЕНП',60:'Покупка/лизинг оборудования',61:'Ремонт оборудования',
+  62:'Закупка инструмента',72:'Проценты по кредиту',73:'Погашение долга',
+  75:'Выплата дивидендов',77:'Расходы СТ АРТ',79:'Возмещение убытков'
+};
+
+// ═══════════════════════════════════
+//  IndexedDB
+// ═══════════════════════════════════
+const IDB = {
+  db: null,
+  async open() {
+    return new Promise((res, rej) => {
+      const req = indexedDB.open('kz_db', 2);
+      req.onupgradeneeded = e => {
+        const db = e.target.result;
+        if (!db.objectStoreNames.contains('reports')) {
+          const s = db.createObjectStore('reports', { keyPath: 'id' });
+          s.createIndex('period_sort', 'period_sort', { unique: false });
+        }
+      };
+      req.onsuccess = () => { this.db = req.result; res(); };
+      req.onerror = () => rej(req.error);
+    });
+  },
+  async getAll() {
+    return new Promise(res => {
+      const tx = this.db.transaction('reports', 'readonly');
+      tx.objectStore('reports').getAll().onsuccess = e => res(e.target.result || []);
+    });
+  },
+  async save(r) {
+    return new Promise(res => {
+      const tx = this.db.transaction('reports', 'readwrite');
+      tx.objectStore('reports').put(r);
+      tx.oncomplete = res;
+    });
+  },
+  async delete(id) {
+    return new Promise(res => {
+      const tx = this.db.transaction('reports', 'readwrite');
+      tx.objectStore('reports').delete(id);
+      tx.oncomplete = res;
+    });
+  },
+  async clear() {
+    return new Promise(res => {
+      const tx = this.db.transaction('reports', 'readwrite');
+      tx.objectStore('reports').clear();
+      tx.oncomplete = res;
+    });
+  }
+};
+
+// ═══════════════════════════════════
+//  НАСТРОЙКИ (localStorage)
+// ═══════════════════════════════════
+const CFG_KEY = 'kz_cfg';
+let cfg = {
+  target_ratio: 0.65,
+  indirect_rows: [...DEFAULT_INDIRECT],
+  direct_rows:   [...DEFAULT_DIRECT]
+};
+function loadCfg() {
+  try { const s = localStorage.getItem(CFG_KEY); if (s) cfg = { ...cfg, ...JSON.parse(s) }; } catch(e){}
+}
+function saveCfg() { localStorage.setItem(CFG_KEY, JSON.stringify(cfg)); }
+
+// ═══════════════════════════════════
+//  НАВИГАЦИЯ
+// ═══════════════════════════════════
+let currentPage = 'dash';
+let prevPage    = 'history';
+
+function goPage(p) {
+  document.querySelectorAll('.page').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(el => el.classList.remove('active'));
+  const pg = document.getElementById('page-' + p);
+  if (pg) pg.classList.add('active');
+  const nb = document.getElementById('nav-' + p);
+  if (nb) nb.classList.add('active');
+  prevPage = currentPage; currentPage = p;
+  window.scrollTo(0, 0);
+  if (p === 'dash')     renderDash();
+  if (p === 'history')  renderHistory();
+  if (p === 'settings') renderSettings();
+  if (p === 'import')   resetImportForm();
+}
+
+function goDetail(id) {
+  prevPage = currentPage;
+  renderDetail(id);
+  document.querySelectorAll('.page').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(el => el.classList.remove('active'));
+  document.getElementById('page-detail').classList.add('active');
+  currentPage = 'detail';
+  window.scrollTo(0, 0);
+}
+function backFromDetail() { goPage(prevPage === 'detail' ? 'history' : prevPage); }
+
+// ═══════════════════════════════════
+//  ФОРМАТИРОВАНИЕ
+// ═══════════════════════════════════
+const fr = n => new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 0 }).format(Math.round(n));
+const fK = n => fr(Math.round(n / 1000)) + ' тыс.';
+const fR = r => r.toFixed(3);
+
+function statusOf(r) {
+  const t = cfg.target_ratio;
+  if (r <= t * 1.1)  return 'ok';
+  if (r <= t * 1.2)  return 'warn';
+  return 'bad';
+}
+function badgeHTML(r) {
+  const s = statusOf(r);
+  const labels = { ok:'В норме', warn:'Повышен', bad:'Высокий' };
+  return `<div class="badge badge-${s}"><div class="badge-dot"></div>${labels[s]}</div>`;
+}
+function pillHTML(r) {
+  const s = statusOf(r);
+  const bg = { ok:'var(--good-bg)', warn:'var(--warn-bg)', bad:'var(--bad-bg)' };
+  const cl = { ok:'var(--good)',    warn:'var(--warn)',    bad:'var(--bad)'    };
+  return `<span class="ratio-pill" style="background:${bg[s]};color:${cl[s]}">${fR(r)}</span>`;
+}
+function statusColor(r) {
+  const s = statusOf(r);
+  return { ok:'var(--good)', warn:'var(--warn)', bad:'var(--bad)' }[s];
+}
+
+// ═══════════════════════════════════
+//  GAUGE
+// ═══════════════════════════════════
+function arc(cx, cy, r, startDeg, endDeg) {
+  const toRad = d => (d - 90) * Math.PI / 180;
+  const s = { x: cx + r*Math.cos(toRad(startDeg)), y: cy + r*Math.sin(toRad(startDeg)) };
+  const e = { x: cx + r*Math.cos(toRad(endDeg)),   y: cy + r*Math.sin(toRad(endDeg))   };
+  const lg = (endDeg - startDeg) > 180 ? 1 : 0;
+  return `M ${s.x} ${s.y} A ${r} ${r} 0 ${lg} 1 ${e.x} ${e.y}`;
+}
+
+function renderGauge(ratio) {
+  const CX=130, CY=130, R=96, S=150, E=390, MAX=1.5;
+  document.getElementById('g-bg').setAttribute('d', arc(CX,CY,R,S,E));
+  const pct = Math.min(ratio / MAX, 1);
+  const fd  = S + pct*(E-S);
+  const fill = document.getElementById('g-fill');
+  fill.setAttribute('d', pct > 0.01 ? arc(CX,CY,R,S,fd) : '');
+  fill.setAttribute('stroke', statusColor(ratio));
+  // target dot
+  const tp  = Math.min(cfg.target_ratio / MAX, 1);
+  const td  = S + tp*(E-S);
+  const tRad = (td-90)*Math.PI/180;
+  const dot = document.getElementById('g-target');
+  dot.setAttribute('cx', CX + R*Math.cos(tRad));
+  dot.setAttribute('cy', CY + R*Math.sin(tRad));
+  // labels
+  document.getElementById('g-val').textContent = fR(ratio);
+  document.getElementById('g-val').setAttribute('fill', statusColor(ratio));
+  document.getElementById('g-target-lbl').textContent = `цель: ${cfg.target_ratio.toFixed(2)}`;
+}
+
+// ═══════════════════════════════════
+//  DASHBOARD
+// ═══════════════════════════════════
+let trendChart = null;
+
+async function renderDash() {
+  const all = await IDB.getAll();
+  const reports = all.sort((a,b) => a.period_sort - b.period_sort);
+  const empty = document.getElementById('dash-empty');
+  const body  = document.getElementById('dash-body');
+
+  if (reports.length === 0) {
+    empty.style.display = 'flex'; body.style.display = 'none';
+    document.getElementById('dash-period-sub').textContent = 'Нет данных';
+    document.getElementById('dash-badge').innerHTML = '';
+    return;
+  }
+  empty.style.display = 'none'; body.style.display = 'block';
+
+  const last = reports[reports.length - 1];
+  const prev = reports.length > 1 ? reports[reports.length - 2] : null;
+  const t    = cfg.target_ratio;
+
+  document.getElementById('dash-period-sub').textContent = last.period;
+  document.getElementById('dash-badge').innerHTML = badgeHTML(last.ratio);
+
+  renderGauge(last.ratio);
+
+  // Среднее соотношение за все периоды
+  const avgRatio = reports.reduce((s, r) => s + r.ratio, 0) / reports.length;
+  const reserve  = last.ratio > t ? (last.ratio - t) * last.direct : 0; // резерв оптимизации в ₽
+
+  document.getElementById('dash-gauge-info').innerHTML = `
+    <div style="font-size:11px;color:var(--ink3);text-align:center;line-height:1.9">
+      ПЗ ${fK(last.direct)} · КЗ ${fK(last.indirect)}<br>
+      <span style="color:var(--ink2)">Среднее за ${reports.length} пер.: </span>
+      <b style="color:${statusColor(avgRatio)}">${fR(avgRatio)}</b>
+      &nbsp;·&nbsp; цель <b>${t.toFixed(2)}</b>
+    </div>`;
+
+  // Metrics
+  const dR  = prev ? last.ratio    - prev.ratio    : null;
+  const dD  = prev ? last.direct   - prev.direct   : null;
+  const dI  = prev ? last.indirect - prev.indirect : null;
+  const dlt = d => d === null ? '' :
+    `<div class="delta ${d>0?'delta-up':'delta-down'}">${d>0?'↑':'↓'} ${fK(Math.abs(d))}</div>`;
+
+  document.getElementById('dash-metrics').innerHTML = [
+    { lbl:'Прямые затраты',    val:fK(last.direct),   sub:dlt(dD), delay:'0s'   },
+    { lbl:'Косвенные затраты', val:fK(last.indirect),  sub:dlt(dI), delay:'.05s' },
+    { lbl:'Соотношение КЗ/ПЗ', val:`<span style="color:${statusColor(last.ratio)}">${fR(last.ratio)}</span>`,
+      sub: dR===null ? '' : `<div class="delta ${dR>0?'delta-up':'delta-down'}">${dR>0?'↑':'↓'} ${Math.abs(dR).toFixed(3)}</div>`,
+      delay:'.1s' },
+    { lbl:`Отклонение от ${t.toFixed(2)}`,
+      val: reserve > 0
+        ? `<span class="delta-up">${fK(reserve)}</span>`
+        : `<span style="color:var(--good)">В норме</span>`,
+      sub: reserve > 0
+        ? `<div style="font-size:10px;color:var(--ink3)">КЗ сверх нормы (${t.toFixed(2)})</div>`
+        : `<div style="font-size:10px;color:var(--good)">✓ цель ${t.toFixed(2)} достигнута</div>`,
+      delay:'.15s' },
+  ].map(m => `
+    <div class="metric" style="animation-delay:${m.delay}">
+      <div class="lbl">${m.lbl}</div>
+      <div class="val">${m.val}</div>
+      ${m.sub}
+    </div>`).join('');
+
+  // Trend chart (last 12)
+  const recent = reports.slice(-12);
+  if (trendChart) { trendChart.destroy(); trendChart = null; }
+  trendChart = new Chart(document.getElementById('trend-canvas').getContext('2d'), {
+    type: 'line',
+    data: {
+      labels: recent.map(r => shortPeriod(r.period)),
+      datasets: [
+        { data: recent.map(r => r.ratio),
+          borderColor: '#B07A3E', backgroundColor: 'rgba(176,122,62,.08)',
+          borderWidth: 2.5, tension: 0.35, fill: true,
+          pointRadius: 5, pointBackgroundColor: recent.map(r => statusColor(r.ratio)),
+          pointBorderColor: 'white', pointBorderWidth: 2,
+          animation: { duration: 800, easing: 'easeOutQuart' } },
+        { data: recent.map(() => t),
+          borderColor: 'rgba(176,122,62,.35)', borderDash: [5,4],
+          borderWidth: 1.5, pointRadius: 0, fill: false }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: {
+        backgroundColor: 'rgba(28,26,23,.9)',
+        callbacks: { label: ctx => ` КЗ/ПЗ = ${fR(ctx.raw)}` }
+      }},
+      scales: {
+        x: { grid: { display: false }, ticks: { font: { size: 9, family: 'DM Sans' }, color: '#9A968F', maxRotation: 45 } },
+        y: { grid: { color: '#EAE7DF' }, ticks: { font: { size: 9, family: 'DM Sans' }, color: '#9A968F' }, min: 0 }
+      }
+    }
+  });
+
+  // Recent list (last 5 reverse)
+  document.getElementById('recent-list').innerHTML = reports.slice(-5).reverse().map(r => `
+    <div style="display:flex;align-items:center;padding:10px 0;border-bottom:1px solid var(--bg3);cursor:pointer" onclick="goDetail('${r.id}')">
+      <div style="flex:1">
+        <div style="font-size:14px;font-weight:600">${r.period}</div>
+        <div style="font-size:11px;color:var(--ink3);margin-top:2px">ПЗ ${fK(r.direct)} · КЗ ${fK(r.indirect)}</div>
+      </div>
+      ${pillHTML(r.ratio)}
+      <svg viewBox="0 0 24 24" fill="none" stroke="var(--ink3)" stroke-width="2" style="width:14px;height:14px;margin-left:8px;flex-shrink:0"><polyline points="9 18 15 12 9 6"/></svg>
+    </div>`).join('') + '<div style="height:4px"></div>';
+}
+
+function shortPeriod(p) {
+  const parts = p.split(' ');
+  return (parts[0] || '').slice(0,3) + ' ' + (parts[1] || '').slice(-2);
+}
+
+// ═══════════════════════════════════
+//  HISTORY
+// ═══════════════════════════════════
+let histChart = null, stackChart = null;
+let histFilter = 'all';
+
+function setFilter(f) {
+  histFilter = f;
+  document.querySelectorAll('.filter-chip').forEach(c => c.classList.toggle('active', c.dataset.filter === f));
+  renderHistory();
+}
+
+async function renderHistory() {
+  const all = await IDB.getAll();
+  const sorted = all.sort((a,b) => a.period_sort - b.period_sort);
+  document.getElementById('hist-count-sub').textContent = `${sorted.length} периодов`;
+
+  if (sorted.length === 0) {
+    document.getElementById('hist-empty').style.display = 'flex';
+    document.getElementById('hist-body').style.display  = 'none';
+    return;
+  }
+  document.getElementById('hist-empty').style.display = 'none';
+  document.getElementById('hist-body').style.display  = 'block';
+
+  // Apply filter
+  let reports = sorted;
+  if (histFilter !== 'all') {
+    const n = parseInt(histFilter);
+    reports = sorted.slice(-n);
+  }
+
+  document.getElementById('hist-chart-title').textContent =
+    `Соотношение КЗ/ПЗ · ${histFilter === 'all' ? 'все периоды' : 'последние ' + histFilter + ' мес.'}`;
+
+  const t = cfg.target_ratio;
+
+  // Destroy old charts
+  if (histChart)  { histChart.destroy();  histChart  = null; }
+  if (stackChart) { stackChart.destroy(); stackChart = null; }
+
+  // Bar chart: ratio by period
+  histChart = new Chart(document.getElementById('hist-canvas').getContext('2d'), {
+    type: 'bar',
+    data: {
+      labels: reports.map(r => shortPeriod(r.period)),
+      datasets: [
+        { data: reports.map(r => r.ratio),
+          backgroundColor: reports.map(r => {
+            const s = statusOf(r.ratio);
+            return { ok:'rgba(74,124,89,.7)', warn:'rgba(192,122,40,.7)', bad:'rgba(166,75,75,.7)' }[s];
+          }),
+          borderRadius: 5, borderSkipped: false },
+        { type: 'line', data: reports.map(() => t),
+          borderColor: 'rgba(176,122,62,.5)', borderDash: [5,4],
+          borderWidth: 1.5, pointRadius: 0, fill: false }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, tooltip: {
+        backgroundColor: 'rgba(28,26,23,.9)',
+        callbacks: { label: ctx => ctx.datasetIndex === 0 ? ` КЗ/ПЗ = ${fR(ctx.raw)}` : ` Норма ${fR(ctx.raw)}` }
+      }},
+      scales: {
+        x: { grid: { display: false }, ticks: { font: { size: 9, family: 'DM Sans' }, color: '#9A968F', maxRotation: 45 } },
+        y: { grid: { color: '#EAE7DF' }, ticks: { font: { size: 9, family: 'DM Sans' }, color: '#9A968F' }, min: 0 }
+      },
+      animation: { duration: 700, easing: 'easeOutQuart' }
+    }
+  });
+
+  // Stacked bars: direct + indirect costs
+  stackChart = new Chart(document.getElementById('stack-canvas').getContext('2d'), {
+    type: 'bar',
+    data: {
+      labels: reports.map(r => shortPeriod(r.period)),
+      datasets: [
+        { label: 'Прямые', data: reports.map(r => r.direct / 1e6),
+          backgroundColor: 'rgba(74,124,89,.65)', borderRadius: 3 },
+        { label: 'Косвенные', data: reports.map(r => r.indirect / 1e6),
+          backgroundColor: 'rgba(176,122,62,.65)', borderRadius: 3 }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: {
+        legend: { position: 'top', labels: { font: { size: 11, family: 'DM Sans' }, boxWidth: 10, padding: 12 } },
+        tooltip: {
+          backgroundColor: 'rgba(28,26,23,.9)',
+          callbacks: { label: ctx => ` ${ctx.dataset.label}: ${ctx.raw.toFixed(2)} млн ₽` }
+        }
+      },
+      scales: {
+        x: { stacked: true, grid: { display: false }, ticks: { font: { size: 9, family: 'DM Sans' }, color: '#9A968F', maxRotation: 45 } },
+        y: { stacked: true, grid: { color: '#EAE7DF' }, ticks: { font: { size: 9, family: 'DM Sans' }, color: '#9A968F',
+          callback: v => v.toFixed(1) + 'м' } }
+      },
+      animation: { duration: 700, easing: 'easeOutQuart' }
+    }
+  });
+
+  // Table
+  document.getElementById('hist-tbody').innerHTML = reports.slice().reverse().map(r => `
+    <tr onclick="goDetail('${r.id}')">
+      <td style="font-weight:600;font-size:13px">${r.period}</td>
+      <td style="font-size:12px;color:var(--ink2)">${fK(r.direct)}</td>
+      <td style="font-size:12px;color:var(--ink2)">${fK(r.indirect)}</td>
+      <td>${pillHTML(r.ratio)}</td>
+      <td>
+        <div class="tbl-actions">
+          <button class="btn-icon" onclick="event.stopPropagation();goDetail('${r.id}')" title="Детали">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          </button>
+          <button class="btn-icon" onclick="event.stopPropagation();deleteReport('${r.id}')" style="color:var(--bad)">
+            <svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6"/><path d="M10 11v6m4-6v6"/></svg>
+          </button>
+        </div>
+      </td>
+    </tr>`).join('');
+}
+
+// ═══════════════════════════════════
+//  DETAIL
+// ═══════════════════════════════════
+async function renderDetail(id) {
+  const all = await IDB.getAll();
+  const r = all.find(x => x.id === id);
+  if (!r) return;
+  const t = cfg.target_ratio;
+
+  document.getElementById('detail-title').textContent = r.period;
+  document.getElementById('detail-badge').innerHTML = badgeHTML(r.ratio);
+  document.getElementById('detail-date').textContent = r.date ? new Date(r.date).toLocaleDateString('ru-RU') : '';
+
+  document.getElementById('detail-metrics').innerHTML = [
+    { lbl:'Прямые',    val:fK(r.direct),   sub:fr(r.direct)+' ₽',   delay:'0s'   },
+    { lbl:'Косвенные', val:fK(r.indirect), sub:fr(r.indirect)+' ₽', delay:'.05s' },
+    { lbl:'КЗ/ПЗ',    val:`<span style="color:${statusColor(r.ratio)}">${fR(r.ratio)}</span>`,
+      sub:`цель: ${t.toFixed(2)} · ${r.source==='xls'?'📊 XLS':'✏️ вручную'}`, delay:'.1s' },
+    (()=>{
+      const res = r.ratio > t ? (r.ratio - t) * r.direct : 0;
+      return {
+        lbl:`Отклонение от ${t.toFixed(2)}`,
+        val: res > 0
+          ? `<span class="delta-up">${fK(res)}</span>`
+          : `<span style="color:var(--good)">В норме</span>`,
+        sub: res > 0
+          ? `<span style="font-size:10px;color:var(--ink3)">${((r.ratio-t).toFixed(3))} сверх нормы · ${fr(res)} ₽</span>`
+          : `<span style="font-size:10px;color:var(--good)">−${Math.abs((r.ratio-t).toFixed(3))} к норме</span>`,
+        delay:'.15s'
+      };
+    })(),
+  ].map(m => `<div class="metric" style="animation-delay:${m.delay}"><div class="lbl">${m.lbl}</div><div class="val">${m.val}</div><div style="font-size:11px;color:var(--ink3);margin-top:3px">${m.sub}</div></div>`).join('');
+
+  const mkBD = items => items && items.length
+    ? items.map(it => `<div class="breakdown-item"><span class="bn">${it.name||'Строка '+it.row}</span><span class="bv">${fr(it.amount)} ₽</span></div>`).join('')
+    : '<div style="font-size:12px;color:var(--ink3);padding:8px 0">Детализация недоступна</div>';
+
+  document.getElementById('bd-indirect').innerHTML = mkBD(r.breakdown?.indirect_items);
+  document.getElementById('bd-direct').innerHTML   = mkBD(r.breakdown?.direct_items);
+  // close toggles
+  ['bt-indirect','bt-direct'].forEach(id => document.getElementById(id).classList.remove('open'));
+  ['bd-indirect','bd-direct'].forEach(id => document.getElementById(id).classList.remove('open'));
+}
+
+function toggleBD(type) {
+  document.getElementById('bt-'+type).classList.toggle('open');
+  document.getElementById('bd-'+type).classList.toggle('open');
+}
+
+// ═══════════════════════════════════
+//  SETTINGS
+// ═══════════════════════════════════
+function renderSettings() {
+  document.getElementById('target-input').value = cfg.target_ratio;
+  updateRangeLabels();
+  document.getElementById('indirect-preview').textContent = rowsPreview(cfg.indirect_rows);
+  document.getElementById('direct-preview').textContent   = rowsPreview(cfg.direct_rows);
+}
+function rowsPreview(rows) {
+  if (!rows || !rows.length) return '—';
+  const s = [...rows].sort((a,b)=>a-b);
+  const parts = []; let st = s[0], en = s[0];
+  for (let i=1;i<s.length;i++) {
+    if (s[i]===en+1) en=s[i];
+    else { parts.push(st===en?`${st}`:`${st}–${en}`); st=en=s[i]; }
+  }
+  parts.push(st===en?`${st}`:`${st}–${en}`);
+  return `Строки: ${parts.join(', ')} · (${rows.length} строк)`;
+}
+function updateRangeLabels() {
+  const t = cfg.target_ratio;
+  document.getElementById('range-ok').textContent   = (t*1.1).toFixed(3);
+  document.getElementById('range-warn').textContent  = (t*1.2).toFixed(3);
+}
+function onTargetChange() {
+  const v = parseFloat(document.getElementById('target-input').value);
+  if (!isNaN(v) && v > 0) { cfg.target_ratio = v; saveCfg(); updateRangeLabels(); }
+}
+
+// Modal rows
+let modalType = 'indirect';
+function openModal(type) {
+  modalType = type;
+  const rows = type === 'indirect' ? cfg.indirect_rows : cfg.direct_rows;
+  document.getElementById('modal-title').textContent = type === 'indirect' ? 'Строки косвенных затрат' : 'Строки прямых затрат';
+  document.getElementById('modal-desc').textContent  = 'Номера строк 1-индексированные (как в Excel-файле "Анализ бизнеса"). Строка 12 = итог строк 13-21 — не включайте обе.';
+  document.getElementById('rows-ta').value = rows.join(', ');
+  document.getElementById('rows-modal').classList.add('open');
+}
+function onModalClick(e) {
+  if (e.target === document.getElementById('rows-modal'))
+    document.getElementById('rows-modal').classList.remove('open');
+}
+function saveRows() {
+  const text = document.getElementById('rows-ta').value;
+  const rows = text.split(/[\s,]+/).map(v => parseInt(v)).filter(v => !isNaN(v) && v > 0);
+  if (!rows.length) { toast('Нет строк'); return; }
+  if (modalType === 'indirect') cfg.indirect_rows = rows;
+  else cfg.direct_rows = rows;
+  saveCfg();
+  document.getElementById('rows-modal').classList.remove('open');
+  renderSettings();
+  toast('Строки сохранены');
+}
+
+// ═══════════════════════════════════
+//  IMPORT: XLS
+// ═══════════════════════════════════
+let parsedItems = [];
+let selectedIdx = new Set();
+
+function resetImportForm() {
+  document.getElementById('parsed-section').style.display = 'none';
+  document.getElementById('drop-zone-full').style.display = 'block';
+  parsedItems = []; selectedIdx.clear();
+}
+
+// File input
+document.getElementById('file-input').addEventListener('change', e => {
+  const f = e.target.files[0]; if (f) processFile(f); e.target.value = '';
+});
+
+// Drop zone on import page
+const dz = document.getElementById('drop-zone-full');
+dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('over'); });
+dz.addEventListener('dragleave', () => dz.classList.remove('over'));
+dz.addEventListener('drop', e => {
+  e.preventDefault(); dz.classList.remove('over');
+  const f = e.dataTransfer.files[0]; if (f) processFile(f);
+});
+
+// GLOBAL drag-anywhere overlay
+let dragDepth = 0;
+document.addEventListener('dragenter', e => {
+  if (e.dataTransfer && e.dataTransfer.types.includes('Files')) {
+    dragDepth++;
+    document.getElementById('drag-overlay').classList.add('active');
+  }
+});
+document.addEventListener('dragleave', () => {
+  dragDepth--;
+  if (dragDepth <= 0) { dragDepth = 0; document.getElementById('drag-overlay').classList.remove('active'); }
+});
+document.addEventListener('dragover', e => e.preventDefault());
+document.addEventListener('drop', e => {
+  e.preventDefault(); dragDepth = 0;
+  document.getElementById('drag-overlay').classList.remove('active');
+  const f = e.dataTransfer?.files?.[0];
+  if (f && (f.name.endsWith('.xls') || f.name.endsWith('.xlsx'))) {
+    goPage('import'); // switch to import page
+    setTimeout(() => processFile(f), 100);
+  }
+});
+
+function processFile(file) {
+  showLoading('Читаю файл ' + file.name + '...');
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const wb   = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
+      const ws   = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: null });
+      const result = extractFromRows(rows);
+      hideLoading();
+      if (!result || !result.length) { showError('Не найдены данные. Проверьте формат файла.'); return; }
+      parsedItems = result;
+      renderParsedList();
+    } catch(ex) {
+      hideLoading(); showError('Ошибка чтения файла: ' + ex.message);
+      console.error(ex);
+    }
+  };
+  reader.onerror = () => { hideLoading(); showError('Не удалось прочитать файл'); };
+  reader.readAsArrayBuffer(file);
+}
+
+function extractFromRows(rows) {
+  // Find header row (months)
+  let hRow = -1;
+  const monthRx = /ЯНВАРЬ|ФЕВРАЛЬ|МАРТ|АПРЕЛЬ|МАЙ|ИЮНЬ|ИЮЛЬ|АВГУСТ|СЕНТЯБРЬ|ОКТЯБРЬ|НОЯБРЬ|ДЕКАБРЬ/i;
+  for (let i = 0; i < Math.min(6, rows.length); i++) {
+    if (rows[i] && rows[i].some(c => c && monthRx.test(String(c)))) { hRow = i; break; }
+  }
+  if (hRow < 0) return null;
+
+  // Collect month columns
+  const months = [];
+  const hr = rows[hRow];
+  for (let c = 0; c < hr.length; c++) {
+    const v = hr[c];
+    if (v && typeof v === 'string' && monthRx.test(v) && v.trim() !== 'ИТОГО') {
+      months.push({ name: v.trim(), col: c });
+    }
+  }
+
+  const results = months.map(({ name, col }) => {
+    let indirect = 0, direct = 0;
+    const ind_items = [], dir_items = [];
+
+    cfg.indirect_rows.forEach(rowNum => {
+      const ri = rowNum - 1;
+      if (ri >= rows.length) return;
+      const v = rows[ri]?.[col];
+      if (v !== null && typeof v === 'number' && !isNaN(v) && v !== 0) {
+        const abs = Math.abs(v);
+        indirect += abs;
+        ind_items.push({ row: rowNum, name: ROW_NAMES[rowNum] || `Строка ${rowNum}`, amount: abs });
+      }
+    });
+
+    cfg.direct_rows.forEach(rowNum => {
+      const ri = rowNum - 1;
+      if (ri >= rows.length) return;
+      const v = rows[ri]?.[col];
+      if (v !== null && typeof v === 'number' && !isNaN(v) && v !== 0) {
+        const abs = Math.abs(v);
+        direct += abs;
+        dir_items.push({ row: rowNum, name: ROW_NAMES[rowNum] || `Строка ${rowNum}`, amount: abs });
+      }
+    });
+
+    return { period: name, indirect, direct,
+      ratio: direct > 0 ? indirect / direct : 0,
+      ind_items, dir_items };
+  }).filter(p => p.direct > 0 || p.indirect > 0);
+
+  return results;
+}
+
+async function renderParsedList() {
+  const t = cfg.target_ratio;
+  document.getElementById('parsed-count').textContent = parsedItems.length;
+  document.getElementById('parsed-section').style.display = 'block';
+  document.getElementById('drop-zone-full').style.display = 'none';
+
+  const existing = await IDB.getAll();
+  const existPeriods = new Set(existing.map(r => r.period));
+
+  document.getElementById('period-select-list').innerHTML = parsedItems.map((p, i) => {
+    const upd = existPeriods.has(p.period);
+    return `
+      <div class="period-item" id="pi-${i}" onclick="togglePI(${i})">
+        <div class="chk"><svg viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg></div>
+        <div style="flex:1">
+          <div class="pi-name">${p.period} ${upd ? '<span style="font-size:10px;color:var(--warn);font-weight:700">↻ обновит</span>' : ''}</div>
+          <div class="pi-nums">ПЗ ${fK(p.direct)} · КЗ ${fK(p.indirect)} · КЗ/ПЗ = ${fR(p.ratio)}</div>
+        </div>
+        ${pillHTML(p.ratio)}
+      </div>`;
+  }).join('');
+
+  updateImportBtn();
+}
+
+function togglePI(i) {
+  if (selectedIdx.has(i)) selectedIdx.delete(i); else selectedIdx.add(i);
+  document.getElementById('pi-'+i).classList.toggle('selected', selectedIdx.has(i));
+  updateImportBtn();
+}
+function selectAllPeriods() {
+  if (selectedIdx.size === parsedItems.length) {
+    selectedIdx.clear();
+    document.querySelectorAll('.period-item').forEach(el => el.classList.remove('selected'));
+  } else {
+    parsedItems.forEach((_, i) => selectedIdx.add(i));
+    document.querySelectorAll('.period-item').forEach(el => el.classList.add('selected'));
+  }
+  updateImportBtn();
+}
+function updateImportBtn() {
+  const btn = document.getElementById('import-btn');
+  btn.disabled = selectedIdx.size === 0;
+  btn.textContent = selectedIdx.size > 0 ? `Импортировать (${selectedIdx.size})` : 'Импортировать выбранные';
+}
+async function importSelected() {
+  let count = 0;
+  for (const i of selectedIdx) {
+    const p = parsedItems[i];
+    const all = await IDB.getAll();
+    const dup = all.find(r => r.period === p.period);
+    if (dup) await IDB.delete(dup.id);
+    await IDB.save({
+      id: genId(), period: p.period, period_sort: periodSort(p.period),
+      date: new Date().toISOString(), source: 'xls',
+      direct: p.direct, indirect: p.indirect, ratio: p.ratio,
+      note: '',
+      breakdown: { indirect_items: p.ind_items, direct_items: p.dir_items }
+    });
+    count++;
+  }
+  toast(`Импортировано: ${count} периодов`);
+  resetImportForm();
+  goPage('history');
+}
+function cancelParse() { resetImportForm(); }
+
+// ═══════════════════════════════════
+//  MANUAL ADD
+// ═══════════════════════════════════
+function updatePreview() {
+  const d = parseFloat(document.getElementById('m-direct').value) || 0;
+  const n = parseFloat(document.getElementById('m-indirect').value) || 0;
+  const el = document.getElementById('calc-preview');
+  if (d > 0) {
+    const r = n / d;
+    el.innerHTML = `${fK(n)} / ${fK(d)} = <b style="color:${statusColor(r)}">${fR(r)}</b> (цель ${cfg.target_ratio.toFixed(2)})`;
+  } else el.textContent = '— / — = —';
+}
+
+async function addManual() {
+  const period   = document.getElementById('m-period').value.trim().toUpperCase();
+  const direct   = parseFloat(document.getElementById('m-direct').value)   || 0;
+  const indirect = parseFloat(document.getElementById('m-indirect').value) || 0;
+  const note     = document.getElementById('m-note').value.trim();
+  if (!period)               { toast('Укажите период');  return; }
+  if (direct<=0 && indirect<=0) { toast('Введите суммы'); return; }
+  const ratio = direct > 0 ? indirect / direct : 0;
+  const all = await IDB.getAll();
+  const dup = all.find(r => r.period === period);
+  if (dup) await IDB.delete(dup.id);
+  await IDB.save({ id:genId(), period, period_sort:periodSort(period),
+    date:new Date().toISOString(), source:'manual', direct, indirect, ratio, note, breakdown:null });
+  toast('Запись добавлена: ' + period);
+  ['m-period','m-direct','m-indirect','m-note'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('calc-preview').textContent = '— / — = —';
+  goPage('history');
+}
+
+// ═══════════════════════════════════
+//  DELETE / CLEAR
+// ═══════════════════════════════════
+async function deleteReport(id) {
+  if (!confirm('Удалить эту запись?')) return;
+  await IDB.delete(id);
+  toast('Запись удалена');
+  renderHistory();
+}
+async function confirmClear() {
+  if (!confirm('Удалить ВСЕ данные? Нельзя отменить.')) return;
+  await IDB.clear();
+  toast('Все данные удалены');
+  renderDash();
+}
+
+// ═══════════════════════════════════
+//  EXPORT
+// ═══════════════════════════════════
+async function exportJSON() {
+  const all = await IDB.getAll();
+  const blob = new Blob([JSON.stringify({ reports: all, cfg }, null, 2)], { type: 'application/json' });
+  const url  = URL.createObjectURL(blob);
+  const a    = Object.assign(document.createElement('a'), { href:url, download:`kz_${new Date().toISOString().slice(0,10)}.json` });
+  a.click(); URL.revokeObjectURL(url);
+}
+
+// ═══════════════════════════════════
+//  LOADING / ERROR / TOAST
+// ═══════════════════════════════════
+function showLoading(msg) {
+  document.getElementById('loading-msg').textContent = msg || 'Обработка...';
+  document.getElementById('loading-bar').classList.add('active');
+}
+function hideLoading() { document.getElementById('loading-bar').classList.remove('active'); }
+function showError(msg) {
+  document.getElementById('error-msg').textContent = msg;
+  document.getElementById('error-bar').classList.add('active');
+  setTimeout(() => document.getElementById('error-bar').classList.remove('active'), 5000);
+}
+function hideError() { document.getElementById('error-bar').classList.remove('active'); }
+
+let toastTimer;
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg; el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 2500);
+}
+
+// ═══════════════════════════════════
+//  UTILS
+// ═══════════════════════════════════
+const MONTHS = ['ЯНВАРЬ','ФЕВРАЛЬ','МАРТ','АПРЕЛЬ','МАЙ','ИЮНЬ','ИЮЛЬ','АВГУСТ','СЕНТЯБРЬ','ОКТЯБРЬ','НОЯБРЬ','ДЕКАБРЬ'];
+function periodSort(p) {
+  const parts = p.toUpperCase().split(/\s+/);
+  const m = MONTHS.indexOf(parts[0]);
+  const y = parseInt(parts[1]) || 0;
+  const yr = y < 100 ? 2000 + y : y;
+  return yr * 100 + (m >= 0 ? m : 0);
+}
+function genId() { return Math.random().toString(36).slice(2) + Date.now().toString(36); }
+
+// ═══════════════════════════════════
+//  RESIZE HANDLER (re-render charts)
+// ═══════════════════════════════════
+let resizeTimer;
+window.addEventListener('resize', () => {
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(() => {
+    if (currentPage === 'dash')    renderDash();
+    if (currentPage === 'history') renderHistory();
+  }, 300);
+});
+
+// ═══════════════════════════════════
+//  SERVICE WORKER
+// ═══════════════════════════════════
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js')
+      .then(() => console.log('SW registered'))
+      .catch(e => console.log('SW error', e));
+  });
+}
+
+// ═══════════════════════════════════
+//  INIT
+// ═══════════════════════════════════
+(async () => {
+  loadCfg();
+  await IDB.open();
+  renderDash();
+  renderSettings();
+})();
+</script>
+</body>
+</html>
